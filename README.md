@@ -2,8 +2,9 @@
 
 [![Build Status](https://github.com/Shopify/shopify_python_api/workflows/CI/badge.svg)](https://github.com/Shopify/shopify_python_api/actions)
 [![PyPI version](https://badge.fury.io/py/ShopifyAPI.svg)](https://badge.fury.io/py/ShopifyAPI)
-[![codecov](https://codecov.io/gh/Shopify/shopify_python_api/branch/master/graph/badge.svg?token=pNTx0TARUx)](https://codecov.io/gh/Shopify/shopify_python_api)
-[![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://github.com/Shopify/shopify_python_api/blob/master/LICENSE)
+![Supported Python Versions](https://img.shields.io/badge/python-3.7%20|%203.8%20|%203.9%20|%203.10%20|%203.11%20|%203.12-brightgreen)
+[![codecov](https://codecov.io/gh/Shopify/shopify_python_api/branch/main/graph/badge.svg?token=pNTx0TARUx)](https://codecov.io/gh/Shopify/shopify_python_api)
+[![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://github.com/Shopify/shopify_python_api/blob/main/LICENSE)
 [![pre-commit](https://img.shields.io/badge/pre--commit-enabled-brightgreen?logo=pre-commit&logoColor=white)](https://github.com/pre-commit/pre-commit)
 
 The [Shopify Admin API](https://shopify.dev/docs/admin-api) Python Library
@@ -23,20 +24,28 @@ pip install --upgrade ShopifyAPI
 
 ### Table of Contents
 
-- [Getting Started](#getting-started)
-  - [Public and Custom Apps](#public-and-custom-apps)
-  - [Private Apps](#private-apps)
-- [Billing](#billing)
-- [Session Tokens](docs/session-tokens.md)
-- [Handling Access Scope Operations](docs/api-access.md)
-- [Advanced Usage](#advanced-usage)
-- [Prefix Options](#prefix-options)
-- [Console](#console)
-- [GraphQL](#graphql)
+- [Usage](#usage)
+  - [Requirements](#requirements)
+  - [Installation](#installation)
+  - [Table of Contents](#table-of-contents)
+  - [Getting Started](#getting-started)
+    - [Public and Custom Apps](#public-and-custom-apps)
+    - [Private Apps](#private-apps)
+      - [With full session](#with-full-session)
+      - [With temporary session](#with-temporary-session)
+  - [Billing](#billing)
+  - [Advanced Usage](#advanced-usage)
+  - [Prefix options](#prefix-options)
+  - [Console](#console)
+  - [GraphQL](#graphql)
 - [Using Development Version](#using-development-version)
+    - [Building and installing dev version](#building-and-installing-dev-version)
+    - [Running Tests](#running-tests)
 - [Relative Cursor Pagination](#relative-cursor-pagination)
+- [Set up pre-commit locally \[OPTIONAL\]](#set-up-pre-commit-locally-optional)
 - [Limitations](#limitations)
 - [Additional Resources](#additional-resources)
+  - [Sample apps built using this library](#sample-apps-built-using-this-library)
 
 
 ### Getting Started
@@ -46,19 +55,23 @@ pip install --upgrade ShopifyAPI
 1. We then need to supply these keys to the Shopify Session Class so that it knows how to authenticate.
 
    ```python
+   import shopify
+
    shopify.Session.setup(api_key=API_KEY, secret=API_SECRET)
    ```
 1.  In order to access a shop's data, apps need an access token from that specific shop. We need to authenticate with that shop using OAuth, which we can start in the following way:
 
     ```python
     shop_url = "SHOP_NAME.myshopify.com"
-    api_version = '2020-10'
+    api_version = '2024-07'
     state = binascii.b2a_hex(os.urandom(15)).decode("utf-8")
     redirect_uri = "http://myapp.com/auth/shopify/callback"
+    # `scope` should be omitted if provided by app's TOML
     scopes = ['read_products', 'read_orders']
 
     newSession = shopify.Session(shop_url, api_version)
-    auth_url = newSession.create_permission_url(scopes, redirect_uri, state)
+    # `scope` should be omitted if provided by app's TOML
+    auth_url = newSession.create_permission_url(redirect_uri, scopes, state)
     # redirect to auth_url
     ```
 
@@ -76,10 +89,11 @@ pip install --upgrade ShopifyAPI
     session = shopify.Session(shop_url, api_version, access_token)
     shopify.ShopifyResource.activate_session(session)
 
-    shop = shopify.Shop.current() # Get the current shop
-    product = shopify.Product.find(179761209) # Get a specific product
+    # Note: REST API examples will be deprecated in 2025
+    shop = shopify.Shop.current()  # Get the current shop
+    product = shopify.Product.find(179761209)  # Get a specific product
 
-    # execute a graphQL call
+    # GraphQL API example
     shopify.GraphQL().execute("{ shop { name id } }")
     ```
 
@@ -139,6 +153,13 @@ _Note: Your application must be public to test the billing process. To test on a
     ```
 
 ### Advanced Usage
+
+> **⚠️ Note**: As of October 1, 2024, the REST Admin API is legacy:
+> - Public apps must migrate to GraphQL by February 2025
+> - Custom apps must migrate to GraphQL by April 2025
+>
+> For migration guidance, see [Shopify's migration guide](https://shopify.dev/docs/apps/build/graphql/migrate/new-product-model)
+
 It is recommended to have at least a basic grasp on the principles of the [pyactiveresource](https://github.com/Shopify/pyactiveresource) library, which is a port of rails/ActiveResource to Python and upon which this package relies heavily.
 
 Instances of `pyactiveresource` resources map to RESTful resources in the Shopify API.
@@ -146,6 +167,7 @@ Instances of `pyactiveresource` resources map to RESTful resources in the Shopif
 `pyactiveresource` exposes life cycle methods for creating, finding, updating, and deleting resources which are equivalent to the `POST`, `GET`, `PUT`, and `DELETE` HTTP verbs.
 
 ```python
+# Note: REST API examples will be deprecated in 2025
 product = shopify.Product()
 product.title = "Shopify Logo T-Shirt"
 product.id                          # => 292082188312
@@ -160,11 +182,18 @@ product.destroy()
 # Delete the resource from the remote server (i.e. Shopify)
 ```
 
+Here is another example to retrieve a list of open orders using certain parameters:
+
+```python
+new_orders = shopify.Order.find(status="open", limit="50")
+```
+
 ### Prefix options
 
 Some resources such as `Fulfillment` are prefixed by a parent resource in the Shopify API (e.g. `orders/450789469/fulfillments/255858046`). In order to interact with these resources, you must specify the identifier of the parent resource in your request.
 
 ```python
+# Note: This REST API example will be deprecated in the future
 shopify.Fulfillment.find(255858046, order_id=450789469)
 ```
 
@@ -178,6 +207,9 @@ This package also includes the `shopify_api.py` script to make it easy to open a
 ### GraphQL
 
 This library also supports Shopify's new [GraphQL API](https://help.shopify.com/en/api/graphql-admin-api). The authentication process is identical. Once your session is activated, simply construct a new graphql client and use `execute` to execute the query.
+
+> **Note**: Shopify recommends using GraphQL API for new development as REST API will be deprecated.
+> See [Migration Guide](https://shopify.dev/docs/apps/build/graphql/migrate/new-product-model) for more details.
 
 ```python
 result = shopify.GraphQL().execute('{ shop { name id } }')
@@ -242,7 +274,7 @@ python setup.py test
 ## Relative Cursor Pagination
 Cursor based pagination support has been added in 6.0.0.
 
-```
+```python
 import shopify
 
 page1 = shopify.Product.find()
@@ -255,7 +287,7 @@ page2 = shopify.Product.find(from_=next_url)
 ```
 
 ## Set up pre-commit locally [OPTIONAL]
-[Pre-commit](https://pre-commit.com/) is set up as a GitHub action that runs on pull requests and pushes to the `master` branch. If you want to run pre-commit locally, install it and set up the git hook scripts
+[Pre-commit](https://pre-commit.com/) is set up as a GitHub action that runs on pull requests and pushes to the `main` branch. If you want to run pre-commit locally, install it and set up the git hook scripts
 ```shell
 pip install -r requirements.txt
 pre-commit install

@@ -16,10 +16,18 @@ from six.moves import input, map
 def start_interpreter(**variables):
     # add the current working directory to the sys paths
     sys.path.append(os.getcwd())
-    console = type("shopify " + shopify.version.VERSION, (code.InteractiveConsole, object), {})
-    import readline
+    try:
+        from IPython import start_ipython
+        from traitlets.config.loader import Config
 
-    console(variables).interact()
+        config = Config(TerminalInteractiveShell={"banner2": "(shopify %s)" % shopify.version.VERSION})
+        start_ipython(argv=[], user_ns=variables, config=config)
+
+    except ImportError:
+        console = type("shopify " + shopify.version.VERSION, (code.InteractiveConsole, object), {})
+        import readline
+
+        console(variables).interact()
 
 
 class ConfigFileError(Exception):
@@ -120,7 +128,7 @@ class Tasks(object):
         if os.path.exists(filename):
             raise ConfigFileError("There is already a config file at " + filename)
         else:
-            config = dict(protocol="https")
+            config = {"protocol": "https"}
             domain = input("Domain? (leave blank for %s.myshopify.com) " % (connection))
             if not domain.strip():
                 domain = "%s.myshopify.com" % (connection)
